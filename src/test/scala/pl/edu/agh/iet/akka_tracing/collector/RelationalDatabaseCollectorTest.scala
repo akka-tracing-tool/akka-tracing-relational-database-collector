@@ -33,12 +33,14 @@ class RelationalDatabaseCollectorTest extends FlatSpec {
     collector.handleReceiverMessage(CollectorReceiverMessage(uuid, "receiver"))
     collector.handleRelationMessage(RelationMessage(UUID.randomUUID(), UUID.randomUUID()))
 
-    Thread.sleep(500)
+    Thread.sleep(1000)
 
-    val messagesRowsCount = Await.result(db.run(messages.length.result), Duration.Inf)
+    val senderMessagesRowsCount = Await.result(db.run(senderMessages.length.result), Duration.Inf)
+    val receiverMessagesRowsCount = Await.result(db.run(receiverMessages.length.result), Duration.Inf)
     val relationRowsCount = Await.result(db.run(relations.length.result), Duration.Inf)
 
-    assert(messagesRowsCount === 1)
+    assert(senderMessagesRowsCount === 1)
+    assert(receiverMessagesRowsCount === 1)
     assert(relationRowsCount === 1)
   }
 }

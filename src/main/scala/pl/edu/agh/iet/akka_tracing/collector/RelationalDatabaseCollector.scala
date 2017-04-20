@@ -3,7 +3,7 @@ package pl.edu.agh.iet.akka_tracing.collector
 import java.util.concurrent.{ Executors, TimeUnit }
 
 import com.typesafe.config.Config
-import pl.edu.agh.iet.akka_tracing.model.{ Message, MessagesRelation }
+import pl.edu.agh.iet.akka_tracing.model.{ Message, MessagesRelation, ReceiverMessage, SenderMessage }
 import pl.edu.agh.iet.akka_tracing.utils.DatabaseUtils
 
 import scala.collection.mutable
@@ -35,13 +35,13 @@ final class RelationalDatabaseCollector(config: Config)
 
   override def handleSenderMessage(msg: CollectorSenderMessage): Unit = {
     queue.synchronized {
-      queue += (messages += Message(msg.id, msg.sender, None, msg.message))
+      queue += (senderMessages += SenderMessage(msg.id, msg.sender, msg.message))
     }
   }
 
   override def handleReceiverMessage(msg: CollectorReceiverMessage): Unit = {
     queue.synchronized {
-      queue += messages.filter(_.id === msg.id).map(_.receiver).update(Some(msg.receiver))
+      queue += (receiverMessages += ReceiverMessage(msg.id, msg.receiver))
     }
   }
 

@@ -6,7 +6,7 @@ import com.typesafe.config.Config
 import org.json4s.JValue
 import org.json4s.native.JsonMethods._
 import org.slf4j.{ Logger, LoggerFactory }
-import pl.edu.agh.iet.akka_tracing.model.{ Message, MessagesRelation }
+import pl.edu.agh.iet.akka_tracing.model.{ ReceiverMessage, SenderMessage, MessagesRelation }
 
 import scala.collection.mutable
 import scala.concurrent.{ ExecutionContext, Future }
@@ -22,21 +22,27 @@ class DatabaseUtils(val config: Config) {
 
   import dc.profile.api._
 
-  private implicit val jValueColumnType = MappedColumnType.base[JValue, String](
+  private[akka_tracing] implicit val jValueColumnType = MappedColumnType.base[JValue, String](
     (json: JValue) => compact(render(json)),
     (s: String) => parse(s)
   )
 
-  class Messages(tag: Tag) extends Table[Message](tag, "messages") {
+  class SenderMessages(tag: Tag) extends Table[SenderMessage](tag, "senderMessages") {
     def id = column[UUID]("id", O.PrimaryKey)
 
     def sender = column[String]("sender")
 
-    def receiver = column[Option[String]]("receiver")
-
     def contents = column[Option[JValue]]("contents", O.SqlType("TEXT"))
 
-    override def * = (id, sender, receiver, contents) <> (Message.tupled, Message.unapply)
+    override def * = (id, sender, contents) <> (SenderMessage.tupled, SenderMessage.unapply)
+  }
+
+  class ReceiverMessages(tag: Tag) extends Table[ReceiverMessage](tag, "receiverMessages") {
+    def id = column[UUID]("id", O.PrimaryKey)
+
+    def receiver = column[String]("receiver")
+
+    override def * = (id, receiver) <> (ReceiverMessage.tupled, ReceiverMessage.unapply)
   }
 
   class MessagesRelations(tag: Tag) extends Table[MessagesRelation](tag, "relations") {
@@ -50,7 +56,8 @@ class DatabaseUtils(val config: Config) {
   }
 
   private[akka_tracing] val db = dc.db
-  private[akka_tracing] val messages = TableQuery[Messages]
+  private[akka_tracing] val senderMessages = TableQuery[SenderMessages]
+  private[akka_tracing] val receiverMessages = TableQuery[ReceiverMessages]
   private[akka_tracing] val relations = TableQuery[MessagesRelations]
 
   def init(implicit ec: ExecutionContext): Future[Unit] = {
@@ -58,16 +65,20 @@ class DatabaseUtils(val config: Config) {
     db.run(MTable.getTables).flatMap(
       (tablesVector: Vector[MTable]) => {
         val tables = tablesVector.toList.map((t: MTable) => t.name.name)
-        var f = mutable.MutableList[Future[Unit]]()
-        if (!tables.contains("messages")) {
-          logger.info("Creating table for messages...")
-          f += db.run(messages.schema.create)
+        var queries = mutable.MutableList[DBIO[Any]]()
+        if (!tables.contains("senderMessages")) {
+          logger.info("Creating table for sender messages...")
+          queries += senderMessages.schema.create
+        }
+        if (!tables.contains("receiverMessages")) {
+          logger.info("Creating table for receiver messages...")
+          queries += receiverMessages.schema.create
         }
         if (!tables.contains("relations")) {
           logger.info("Creating table for relations...")
-          f += db.run(relations.schema.create)
+          queries += relations.schema.create
         }
-        Future.sequence(f)
+        db.run(DBIO.seq(queries: _*))
       }
     ).map[Unit](_ =>
       logger.info("Done")
@@ -77,7 +88,8 @@ class DatabaseUtils(val config: Config) {
   def clean(implicit ec: ExecutionContext): Future[Unit] = {
     logger.info("Cleaning tables...")
     db.run(DBIO.seq(
-      messages.delete,
+      senderMessages.delete,
+      receiverMessages.delete,
       relations.delete
     )).map[Unit](_ => logger.info("Done"))
   }
