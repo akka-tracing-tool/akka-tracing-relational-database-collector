@@ -6,13 +6,13 @@ import com.typesafe.config.ConfigFactory
 import org.json4s.DefaultFormats
 import org.json4s.Extraction._
 import org.scalatest.FlatSpec
+import pl.edu.agh.iet.akka_tracing.model.{ MessagesRelation, ReceiverMessage, SenderMessage }
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
 class RelationalDatabaseCollectorTest extends FlatSpec {
 
-  import Collector._
   import RelationalDatabaseCollectorTest._
 
   import scala.concurrent.ExecutionContext.Implicits.global
@@ -29,16 +29,18 @@ class RelationalDatabaseCollectorTest extends FlatSpec {
 
     Await.result(init, Duration.Inf)
 
-    collector.handleSenderMessage(CollectorSenderMessage(uuid, "sender", Some(decompose(Message(1)))))
-    collector.handleReceiverMessage(CollectorReceiverMessage(uuid, "receiver"))
-    collector.handleRelationMessage(RelationMessage(UUID.randomUUID(), UUID.randomUUID()))
+    collector.handleSenderMessage(SenderMessage(uuid, "sender", Some(decompose(Message(1)))))
+    collector.handleReceiverMessage(ReceiverMessage(uuid, "receiver"))
+    collector.handleRelationMessage(MessagesRelation(UUID.randomUUID(), UUID.randomUUID()))
 
-    Thread.sleep(500)
+    Thread.sleep(1000)
 
-    val messagesRowsCount = Await.result(db.run(messages.length.result), Duration.Inf)
+    val senderMessagesRowsCount = Await.result(db.run(senderMessages.length.result), Duration.Inf)
+    val receiverMessagesRowsCount = Await.result(db.run(receiverMessages.length.result), Duration.Inf)
     val relationRowsCount = Await.result(db.run(relations.length.result), Duration.Inf)
 
-    assert(messagesRowsCount === 1)
+    assert(senderMessagesRowsCount === 1)
+    assert(receiverMessagesRowsCount === 1)
     assert(relationRowsCount === 1)
   }
 }

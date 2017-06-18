@@ -17,7 +17,22 @@ class RelationalDatabaseDataSource(config: Config)
 
   override def onStart: Future[Unit] = databaseUtils.init
 
-  override def getMessages: Future[List[Message]] = db.run(messages.to[List].result)
+  override def getMessages: Future[List[Message]] = {
+    db.run(
+      (for {
+        (senderMessage, receiverMessage) <- senderMessages joinLeft receiverMessages on (_.id === _.id)
+      } yield (
+        senderMessage.id,
+        senderMessage.sender,
+        receiverMessage.map(_.receiver),
+        senderMessage.contents
+      )).to[List].result
+    ).map(
+      _.map {
+        case (id, sender, receiver, contents) => Message(id, sender, receiver, contents)
+      }
+    )
+  }
 
   override def getRelations: Future[List[MessagesRelation]] = db.run(relations.to[List].result)
 }
