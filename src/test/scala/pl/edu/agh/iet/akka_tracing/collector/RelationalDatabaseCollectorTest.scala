@@ -6,13 +6,13 @@ import com.typesafe.config.ConfigFactory
 import org.json4s.DefaultFormats
 import org.json4s.Extraction._
 import org.scalatest.FlatSpec
+import pl.edu.agh.iet.akka_tracing.model.{ MessagesRelation, ReceiverMessage, SenderMessage }
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
 class RelationalDatabaseCollectorTest extends FlatSpec {
 
-  import Collector._
   import RelationalDatabaseCollectorTest._
 
   import scala.concurrent.ExecutionContext.Implicits.global
@@ -29,9 +29,9 @@ class RelationalDatabaseCollectorTest extends FlatSpec {
 
     Await.result(init, Duration.Inf)
 
-    collector.handleSenderMessage(CollectorSenderMessage(uuid, "sender", Some(decompose(Message(1)))))
-    collector.handleReceiverMessage(CollectorReceiverMessage(uuid, "receiver"))
-    collector.handleRelationMessage(RelationMessage(UUID.randomUUID(), UUID.randomUUID()))
+    collector.handleSenderMessage(SenderMessage(uuid, "sender", Some(decompose(Message(1)))))
+    collector.handleReceiverMessage(ReceiverMessage(uuid, "receiver"))
+    collector.handleRelationMessage(MessagesRelation(UUID.randomUUID(), UUID.randomUUID()))
 
     Thread.sleep(1000)
 
