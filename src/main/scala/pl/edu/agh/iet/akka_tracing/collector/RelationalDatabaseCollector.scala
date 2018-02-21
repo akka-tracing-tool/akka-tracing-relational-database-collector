@@ -1,17 +1,18 @@
 package pl.edu.agh.iet.akka_tracing.collector
 
-import java.util.concurrent.{ Executors, TimeUnit }
-
+import akka.actor.Props
 import com.typesafe.config.Config
 import pl.edu.agh.iet.akka_tracing.model.{ MessagesRelation, ReceiverMessage, SenderMessage }
 import pl.edu.agh.iet.akka_tracing.utils.DatabaseUtils
 
 import scala.collection.mutable
-import scala.concurrent.ExecutionContext
 
-final class RelationalDatabaseCollector(config: Config)
-                                       (implicit val ec: ExecutionContext)
-  extends Collector {
+final class RelationalDatabaseCollector(config: Config) extends Collector {
+
+  import RelationalDatabaseCollector.SendToDatabase
+  import pl.edu.agh.iet.akka_tracing.config.ConfigUtils._
+
+  import scala.concurrent.duration._
 
   private[akka_tracing] val databaseUtils = new DatabaseUtils(config)
 
@@ -19,38 +20,37 @@ final class RelationalDatabaseCollector(config: Config)
   import dc.profile.api._
 
   private val queue = mutable.MutableList[DBIO[Any]]()
+  private val sendToDatabaseInterval = config.getOrElse[Int]("sendToDatabaseInterval.millis", 1000).millis
 
-  private val threadPool = Executors.newScheduledThreadPool(1)
-  threadPool.scheduleAtFixedRate(new Runnable {
-    override def run(): Unit = {
-      queue.synchronized {
-        val actions = queue.toList
-        queue.clear()
-        db.run(DBIO.seq(actions: _*))
-      }
-    }
-  }, 500, 500, TimeUnit.MILLISECONDS)
+  context.system.scheduler.schedule(sendToDatabaseInterval, sendToDatabaseInterval, self, SendToDatabase)
 
   override def handleSenderMessage(msg: SenderMessage): Unit = {
-    queue.synchronized {
-      queue += (senderMessages += msg)
-    }
+    queue += (senderMessages += msg)
   }
 
   override def handleReceiverMessage(msg: ReceiverMessage): Unit = {
-    queue.synchronized {
-      queue += (receiverMessages += msg)
-    }
+    queue += (receiverMessages += msg)
   }
 
   override def handleRelationMessage(msg: MessagesRelation): Unit = {
-    queue.synchronized {
-      queue += (relations += msg)
-    }
+    queue += (relations += msg)
+  }
+
+  override def handleOtherMessages: PartialFunction[Any, Unit] = {
+    case SendToDatabase =>
+      val actions = queue.toList
+      queue.clear()
+      db.run(DBIO.seq(actions: _*))
   }
 }
 
+object RelationalDatabaseCollector {
+
+  case object SendToDatabase
+
+}
+
 final class RelationalDatabaseCollectorConstructor extends CollectorConstructor {
-  override def fromConfig(config: Config)(implicit ec: ExecutionContext): Collector =
-    new RelationalDatabaseCollector(config)
+  override def propsFromConfig(config: Config): Props =
+    Props(classOf[RelationalDatabaseCollector], config)
 }
